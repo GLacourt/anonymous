@@ -1,7 +1,7 @@
 {
   "name": "glacourt/anonymous",
+  "type": "library",
   "description": "Make database dump anonymous on purpose",
-  "minimum-stability": "stable",
   "license": "proprietary",
   "authors": [
     {
@@ -21,11 +21,6 @@
   "autoload": {
     "psr-4": {
       "Anonymous\\": "src/"
-    }
-  },
-  "extra": {
-    "branch-alias": {
-      "dev-master": "0.x"
     }
   }
 }
