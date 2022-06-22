@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Anonymous;
 
+use Anonymous\DependencyInjection\Compiler\AnonymizerPass;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 
 use function dirname;
@@ -12,6 +14,18 @@ use function dirname;
  */
 class AnonymousBundle extends Bundle
 {
+    /**
+     * @param ContainerBuilder $container
+     *
+     * @return void
+     */
+    public function build(ContainerBuilder $container): void
+    {
+        parent::build($container);
+
+        $container->addCompilerPass(new AnonymizerPass());
+    }
+
     /**
      * @return string
      */
