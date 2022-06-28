@@ -9,6 +9,14 @@
 
         <prototype namespace="Anonymous\" resource="../src/*" exclude="../src/{DependencyInjection,Anonymizer}"/>
 
+        <instanceof id="Anonymous\Anonymizer\AnonymizerInterface" autowire="true">
+            <tag name="anonymous.anonymizer"/>
+        </instanceof>
 
+        <service id="anonymous.anonymizer" class="Anonymous\Service\AnonymizerService">
+            <argument></argument>
+            <argument></argument>
+            <argument></argument>
+        </service>
     </services>
 </container>

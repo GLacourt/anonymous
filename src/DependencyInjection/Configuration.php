@@ -14,8 +14,19 @@ class Configuration implements ConfigurationInterface
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('anonymous');
-
-
+        $rootNode    = $treeBuilder->getRootNode();
+        
+        $rootNode
+            ->children()
+                ->arrayNode('mapping')
+                    ->normalizeKeys(false)
+                    ->useAttributeAsKey('entity')
+                    ->defaultValue([])
+                    ->prototype('variable')
+                ->end()
+            ->end()
+        ;
+        
         return $treeBuilder;
     }
 }
