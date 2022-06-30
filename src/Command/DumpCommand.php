@@ -4,25 +4,26 @@ declare(strict_types=1);
 
 namespace Anonymous\Command;
 
-use Anonymous\Event\AfterAnonymousDatabaseCreated;
+use Anonymous\Anonymizer;
 use Anonymous\Event\AnonymousDatabaseEvent;
+use Anonymous\Loader\Platform\MySql as MySqlLoader;
 use Anonymous\Loader\Platform\PostgreSql as PostgreSqlLoader;
+use Anonymous\Service\AnonymizerService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
 use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\ORM\Mapping\ClassMetadata;
-use Doctrine\ORM\Query\Parameter;
-use Doctrine\ORM\Tools\SchemaTool;
 use Doctrine\ORM\Tools\ToolsException;
 use Doctrine\Persistence\ManagerRegistry;
 use InvalidArgumentException;
+use Spatie\DbDumper\Databases\MySql as MySqlDumper;
 use Spatie\DbDumper\Databases\PostgreSql as PostgreSqlDumper;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ChoiceQuestion;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -41,17 +42,23 @@ class DumpCommand extends Command
     /** @var EventDispatcherInterface $eventDispatcher */
     protected EventDispatcherInterface $eventDispatcher;
 
+    /** @var Anonymizer $anonymizer */
+    protected Anonymizer $anonymizer;
+
     /**
      * DumpCommand Constructor
      *
-     * @param ManagerRegistry $doctrine
+     * @param ManagerRegistry          $doctrine
+     * @param EventDispatcherInterface $eventDispatcher
+     * @param AnonymizerService        $anonymizerService
      */
-    public function __construct(ManagerRegistry $doctrine, EventDispatcherInterface $eventDispatcher)
+    public function __construct(ManagerRegistry $doctrine, EventDispatcherInterface $eventDispatcher, Anonymizer $anonymizer)
     {
         parent::__construct();
 
         $this->doctrine        = $doctrine;
         $this->eventDispatcher = $eventDispatcher;
+        $this->anonymizer      = $anonymizer;
     }
 
     /**
@@ -67,6 +74,7 @@ class DumpCommand extends Command
      *
      * @return int
      * @throws Exception
+     * @throws ToolsException
      */
     public function execute(InputInterface $input, OutputInterface $output): int
     {
@@ -89,6 +97,8 @@ class DumpCommand extends Command
         }
 
         $this->dumpDatabase($connectionName);
+
+        $this->anonymizer->anonymize();
 
         dd('TODO reverse data into new database');
 
@@ -268,7 +278,23 @@ class DumpCommand extends Command
                 ->setDbName($name)
                 ->setUserName($params['user'])
                 ->setPassword($params['password'])
-                ->fileToLoad('pgdump.sql')
+                ->loadFromFile('pgdump.sql')
+            ;
+        }
+
+        if ($platform instanceof MySQLPlatform) {
+            MySqlDumper::create()
+                ->setDbName($params['dbname'])
+                ->setUserName($params['user'])
+                ->setPassword($params['password'])
+                ->dumpToFile('msdump.sql')
+            ;
+
+            MySqlLoader::create()
+                ->setDbName($name)
+                ->setUserName($params['user'])
+                ->setPassword($params['password'])
+                ->loadFromFile('msdump.sql')
             ;
         }
     }

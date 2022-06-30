@@ -27,10 +27,12 @@ class AnonymousExtension extends Extension
 
         $config = $this->processConfiguration(new Configuration(), $configs);
 
-        if ($container->hasDefinition('anonymous.anonymizer')) {
-            $container->getDefinition('anonymous.anonymizer')
-                ->replaceArgument(0, $config['mapping']);
+        if ($container->hasDefinition('Anonymous\Anonymizer')) {
+            $definition = $container->getDefinition('Anonymous\Anonymizer')
+                ->replaceArgument('$config', $config['mapping']);
             ;
+
+            $container->setDefinition('Anonymous\Anonymizer', $definition);
         }
     }
 }

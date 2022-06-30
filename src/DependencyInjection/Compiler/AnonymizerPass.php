@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Anonymous\DependencyInjection\Compiler;
 
-use Anonymous\Anonymizer\AnonymizerRegistryInterface;
+use Anonymous\AnonymizerRegistryInterface;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;

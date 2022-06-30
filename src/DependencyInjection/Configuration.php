@@ -19,6 +19,7 @@ class Configuration implements ConfigurationInterface
         $rootNode
             ->children()
                 ->arrayNode('mapping')
+                    ->info('Set the mapping with entities, properties and anonymizer to be used.')
                     ->normalizeKeys(false)
                     ->useAttributeAsKey('entity')
                     ->defaultValue([])

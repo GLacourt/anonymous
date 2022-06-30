@@ -5,18 +5,26 @@
            xsi:schemaLocation="http://symfony.com/schema/dic/services https://symfony.com/schema/dic/services/services-1.0.xsd">
 
     <services>
-        <defaults public="false" autowire="true" autoconfigure="true" />
+        <defaults public="false" autowire="false" autoconfigure="false" />
 
-        <prototype namespace="Anonymous\" resource="../src/*" exclude="../src/{DependencyInjection,Anonymizer}"/>
+        <prototype namespace="Anonymous\Anonymizer\" resource="../src/Anonymizer/" />
 
-        <instanceof id="Anonymous\Anonymizer\AnonymizerInterface" autowire="true">
+        <instanceof id="Anonymous\Anonymizer\AnonymizerInterface">
             <tag name="anonymous.anonymizer"/>
         </instanceof>
 
-        <service id="anonymous.anonymizer" class="Anonymous\Service\AnonymizerService">
-            <argument></argument>
-            <argument></argument>
-            <argument></argument>
+        <service id="Anonymous\Command\DumpCommand" autowire="true">
+            <tag name="console.command" command="anonymous:dump" />
+            <tag name="console.command" command="an:du" />
+        </service>
+
+        <service id="anonymous.registry" class="Anonymous\AnonymizerRegistry" />
+
+        <service id="Anonymous\AnonymizerRegistryInterface" alias="anonymous.registry"/>
+
+        <service id="Anonymous\Anonymizer">
+            <argument key="$anonymizerRegistry" type="service" id="anonymous.registry"/>
+            <argument key="$config" type="collection" />
         </service>
     </services>
 </container>
