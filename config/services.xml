@@ -23,7 +23,8 @@
         <service id="Anonymous\AnonymizerRegistryInterface" alias="anonymous.registry"/>
 
         <service id="Anonymous\Anonymizer">
-            <argument key="$anonymizerRegistry" type="service" id="anonymous.registry"/>
+            <argument key="$anonymizerRegistry" type="service" id="anonymous.registry" />
+            <argument key="$managerRegistry" type="service" id="Doctrine\Persistence\ManagerRegistry" />
             <argument key="$config" type="collection" />
         </service>
     </services>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Anonymous\DependencyInjection;
 
+use Anonymous\Anonymizer\AnonymizerInterface;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -34,5 +35,9 @@ class AnonymousExtension extends Extension
 
             $container->setDefinition('Anonymous\Anonymizer', $definition);
         }
+
+        $container
+            ->registerForAutoconfiguration(AnonymizerInterface::class)
+            ->addTag('anonymous.anonymizer');
     }
 }

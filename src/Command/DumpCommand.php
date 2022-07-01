@@ -6,9 +6,8 @@ namespace Anonymous\Command;
 
 use Anonymous\Anonymizer;
 use Anonymous\Event\AnonymousDatabaseEvent;
-use Anonymous\Loader\Platform\MySql as MySqlLoader;
 use Anonymous\Loader\Platform\PostgreSql as PostgreSqlLoader;
-use Anonymous\Service\AnonymizerService;
+use Anonymous\Loader\Platform\MySql as MySqlLoader;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
@@ -19,8 +18,8 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\ToolsException;
 use Doctrine\Persistence\ManagerRegistry;
 use InvalidArgumentException;
-use Spatie\DbDumper\Databases\MySql as MySqlDumper;
 use Spatie\DbDumper\Databases\PostgreSql as PostgreSqlDumper;
+use Spatie\DbDumper\Databases\MySql as MySqlDumper;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -50,7 +49,7 @@ class DumpCommand extends Command
      *
      * @param ManagerRegistry          $doctrine
      * @param EventDispatcherInterface $eventDispatcher
-     * @param AnonymizerService        $anonymizerService
+     * @param Anonymizer               $anonymizer
      */
     public function __construct(ManagerRegistry $doctrine, EventDispatcherInterface $eventDispatcher, Anonymizer $anonymizer)
     {
@@ -74,7 +73,6 @@ class DumpCommand extends Command
      *
      * @return int
      * @throws Exception
-     * @throws ToolsException
      */
     public function execute(InputInterface $input, OutputInterface $output): int
     {
@@ -99,8 +97,6 @@ class DumpCommand extends Command
         $this->dumpDatabase($connectionName);
 
         $this->anonymizer->anonymize();
-
-        dd('TODO reverse data into new database');
 
         return self::SUCCESS;
     }
