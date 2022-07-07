@@ -15,7 +15,7 @@ class Configuration implements ConfigurationInterface
     {
         $treeBuilder = new TreeBuilder('anonymous');
         $rootNode    = $treeBuilder->getRootNode();
-        
+
         $rootNode
             ->children()
                 ->arrayNode('mapping')
@@ -27,7 +27,7 @@ class Configuration implements ConfigurationInterface
                 ->end()
             ->end()
         ;
-        
+
         return $treeBuilder;
     }
 }

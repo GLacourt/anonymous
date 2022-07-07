@@ -6,6 +6,7 @@ namespace Anonymous\Loader\Platform;
 
 use Anonymous\Loader\DbLoader;
 use Anonymous\Loader\Exception\CannotStartLoad;
+use Symfony\Component\Process\Process;
 
 /**
  * Class MySql

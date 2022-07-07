@@ -22,9 +22,10 @@ class Anonymizer
     protected array $config = [];
 
     /**
-     * AnonymizerService Constructor
+     * Anonymizer constructor.
      *
      * @param AnonymizerRegistryInterface $anonymizerRegistry
+     * @param ManagerRegistry             $managerRegistry
      * @param array                       $config
      */
     public function __construct(AnonymizerRegistryInterface $anonymizerRegistry, ManagerRegistry $managerRegistry, array $config = [])
@@ -32,14 +33,7 @@ class Anonymizer
         $this->anonymizerRegistry = $anonymizerRegistry;
         $this->managerRegistry    = $managerRegistry;
         $this->config             = $config;
-    }
 
-    /**
-     * @return void
-     */
-    public function getAnonymousConnection()
-    {
-        dd($this->managerRegistry->getConnectionNames());
     }
 
     /**
@@ -47,8 +41,13 @@ class Anonymizer
      */
     public function anonymize(): void
     {
-        $entityManager = $this->managerRegistry->getManager('anonymous');
-        
+        $defaultConnection = $this->managerRegistry->getConnection('default');
+        $anonymousConnection = $this->managerRegistry->getConnection('anonymous');
+
+        dd($this->managerRegistry->getManagers(), $this->managerRegistry->getConnections());
+
+        $entityManager = $this->managerRegistry->getManager('default');
+
         $propertyAccessor = PropertyAccess::createPropertyAccessor();
 
         foreach ($this->config as $entity => $properties) {
