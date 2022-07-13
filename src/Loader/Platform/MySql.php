@@ -6,6 +6,8 @@ namespace Anonymous\Loader\Platform;
 
 use Anonymous\Loader\DbLoader;
 use Anonymous\Loader\Exception\CannotStartLoad;
+use Anonymous\Loader\Exception\FileNotFoundException;
+use Anonymous\Loader\Exception\LoadFailed;
 use Symfony\Component\Process\Process;
 
 /**
@@ -29,14 +31,14 @@ class MySql extends DbLoader
      * @param string $dumpFile
      *
      * @return void
-     * @throws \Anonymous\Loader\Exception\LoadFailed
+     * @throws LoadFailed|CannotStartLoad
      */
     public function loadFromFile(string $dumpFile): void
     {
         $this->guardAgainstIncompleteCredentials();
 
         if (!file_exists($dumpFile)) {
-            // throw exception
+            throw new FileNotFoundException();
         }
 
         $process = $this->getProcess($dumpFile);
@@ -61,7 +63,6 @@ class MySql extends DbLoader
 
     /**
      * @param string $dumpFile
-     * @param string $temporaryCredentialsFile
      *
      * @return string
      */
@@ -71,8 +72,8 @@ class MySql extends DbLoader
         $credentials = $this->getPassFilePath();
 
         $command = [
-            "{$quote}{$this->dumpBinaryPath}mysqldump{$quote}",
-            "--defaults-extra-file=\"{$credentials}\"",
+            "$quote{$this->dumpBinaryPath}mysql$quote",
+            "--defaults-extra-file=\"$credentials\"",
             $this->dbName,
         ];
 
@@ -94,9 +95,9 @@ class MySql extends DbLoader
     {
         $contents = [
             '[client]',
-            "user = '{$this->userName}'",
-            "password = '{$this->password}'",
-            "port = '{$this->port}'",
+            "user = '$this->userName'",
+            "password = '$this->password'",
+            "port = '$this->port'",
         ];
 
         fwrite($this->credentials, implode(PHP_EOL, $contents));
@@ -116,7 +117,7 @@ class MySql extends DbLoader
             }
         }
 
-        if (strlen($this->dbName) === 0 && ! $this->allDatabasesWasSetAsExtraOption) {
+        if (strlen($this->dbName) === 0) {
             throw CannotStartLoad::emptyParameter('dbName');
         }
     }
