@@ -6,9 +6,8 @@ namespace Anonymous\Loader\Platform;
 
 use Anonymous\Loader\DbLoader;
 use Anonymous\Loader\Exception\CannotStartLoad;
+use Anonymous\Loader\Exception\FileNotFoundException;
 use Anonymous\Loader\Exception\LoadFailed;
-use Spatie\DbDumper\DbDumper;
-use Spatie\DbDumper\Exceptions\CannotStartDump;
 use Symfony\Component\Process\Process;
 
 /**
@@ -32,15 +31,14 @@ class PostgreSql extends DbLoader
      * @param string $dumpFile
      *
      * @return void
-     * @throws CannotStartDump
-     * @throws LoadFailed
+     * @throws LoadFailed|CannotStartLoad
      */
     public function loadFromFile(string $dumpFile): void
     {
         $this->guardAgainstIncompleteCredentials();
 
         if (!file_exists($dumpFile)) {
-            // throw exception
+            throw  new FileNotFoundException();
         }
 
         $process = $this->getProcess($dumpFile);
@@ -76,10 +74,10 @@ class PostgreSql extends DbLoader
         $quote = $this->determineQuote();
 
         $command = [
-            "{$quote}{$this->loaderBinaryPath}psql{$quote}",
-            "-U {$this->userName}",
-            "-h {$this->host}",
-            "-p {$this->port}",
+            "$quote{$this->loaderBinaryPath}psql$quote",
+            "-U $this->userName",
+            "-h $this->host",
+            "-p $this->port",
         ];
 
         foreach ($this->extraOptions as $extraOption) {
@@ -109,9 +107,9 @@ class PostgreSql extends DbLoader
 
     /**
      * @return void
-     * @throws CannotStartDump
+     * @throws CannotStartLoad
      */
-    protected function guardAgainstIncompleteCredentials()
+    protected function guardAgainstIncompleteCredentials(): void
     {
         foreach (['userName', 'dbName', 'host'] as $requiredProperty) {
             if (empty($this->$requiredProperty)) {
@@ -128,9 +126,8 @@ class PostgreSql extends DbLoader
     protected function escapeCredentialEntry(mixed $entry): string
     {
         $entry = str_replace('\\', '\\\\', (string) $entry);
-        $entry = str_replace(':', '\\:', (string) $entry);
 
-        return $entry;
+        return str_replace(':', '\\:', (string) $entry);
     }
 
     /**
