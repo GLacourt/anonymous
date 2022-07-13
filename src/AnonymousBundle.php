@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Anonymous;
 
 use Anonymous\DependencyInjection\Compiler\AnonymizerPass;
+use Doctrine\Bundle\DoctrineBundle\DependencyInjection\DoctrineExtension;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 

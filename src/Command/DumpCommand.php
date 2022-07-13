@@ -6,6 +6,7 @@ namespace Anonymous\Command;
 
 use Anonymous\Anonymizer;
 use Anonymous\Event\AnonymousDatabaseEvent;
+use Anonymous\Loader\Exception\LoadFailed;
 use Anonymous\Loader\Platform\PostgreSql as PostgreSqlLoader;
 use Anonymous\Loader\Platform\MySql as MySqlLoader;
 use Doctrine\DBAL\Connection;
@@ -17,9 +18,12 @@ use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\ToolsException;
 use Doctrine\Persistence\ManagerRegistry;
+use Doctrine\Persistence\Mapping\MappingException;
 use InvalidArgumentException;
+use ReflectionException;
 use Spatie\DbDumper\Databases\PostgreSql as PostgreSqlDumper;
 use Spatie\DbDumper\Databases\MySql as MySqlDumper;
+use Spatie\DbDumper\Exceptions\CannotStartDump;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -61,40 +65,25 @@ class DumpCommand extends Command
     }
 
     /**
-     * @return void
-     */
-    protected function configure(): void
-    {
-    }
-
-    /**
      * @param InputInterface  $input
      * @param OutputInterface $output
      *
      * @return int
-     * @throws Exception
+     * @throws CannotStartDump|Exception|LoadFailed|MappingException|ReflectionException
      */
     public function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
 
-        $connectionNames = array_keys($this->doctrine->getConnectionNames());
-        $connectionName  = $connectionNames[0];
-
-        if (count($connectionNames) > 1) {
-            $helper   = $this->getHelper('question');
-            $question = new ChoiceQuestion('Please select a connection', $connectionNames, array_search('default', $connectionNames) ?: 0);
-
-            $question->setErrorMessage('Connection %s is invalid');
-
-            $connectionName = $helper->ask($input, $output, $question);
-        }
-
-        if (!$this->createAnonymousDatabase($io, $connectionName)) {
+        if (!$this->createAnonymousDatabase($io)) {
             return self::FAILURE;
         }
 
-        $this->dumpDatabase($connectionName);
+        $io->info('Dumping default database in anonymous database...');
+
+        $this->dumpDatabase();
+
+        $io->info('Anonymizing...');
 
         $this->anonymizer->anonymize();
 
@@ -102,88 +91,16 @@ class DumpCommand extends Command
     }
 
     /**
-     * @param string $name
-     *
-     * @return array
-     */
-    protected function getConnectionInfo(string $name): array
-    {
-        $connection = $this->doctrine->getConnection($name);
-        $params     = $this->initParams($connection);
-        $name       = $this->getDatabaseName($connection, $params);
-
-        return [$connection, $params, $name];
-    }
-
-    /**
-     * @param string $name
-     *
-     * @return array
-     */
-    protected function getConnectionToAnonymousDatabase(string $connectionName): Connection
-    {
-        [$connection, $params, $name] = $this->getConnectionInfo($connectionName);
-
-        $params['dbname'] = $name;
-        unset($params['path'], $params['url']);
-
-        return DriverManager::getConnection($params);
-    }
-
-    /**
-     * @param Connection $connection
-     *
-     * @return array
-     */
-    protected function initParams(Connection $connection): array
-    {
-        $params = $connection->getParams();
-
-        if (isset($params['driverOptions'])) {
-            $driverOptions = $params['driverOptions'];
-        }
-
-        if (isset($params['primary'])) {
-            $params                  = $params['primary'];
-            $params['driverOptions'] = $driverOptions;
-        }
-
-        if (isset($params['master'])) {
-            $params                  = $params['master'];
-            $params['driverOptions'] = $driverOptions;
-        }
-
-        return $params;
-    }
-
-    /**
-     * @param Connection $connection
-     * @param array      $params
-     *
-     * @return string
-     * @throws Exception
-     */
-    protected function getDatabaseName(Connection $connection, array $params): string
-    {
-        $hasPath = isset($params['path']);
-        $name    = $hasPath ? $params['path'] : ($params['dbname'] ?? false);
-        if (!$name) {
-            throw new InvalidArgumentException('Connection does not contain a "path" or "dbname" parameter and cannot be created.');
-        }
-
-        return sprintf('%s_anonymous', $name);
-    }
-
-    /**
      * @param SymfonyStyle $io
-     * @param string       $connectionName
-     *
      * @return bool
      * @throws Exception
      */
-    protected function createAnonymousDatabase(SymfonyStyle $io, string $connectionName): bool
+    protected function createAnonymousDatabase(SymfonyStyle $io): bool
     {
-        [$connection, $params, $name] = $this->getConnectionInfo($connectionName);
+        /** @var Connection $connection */
+        $connection = $this->doctrine->getConnection('anonymous');
+        $params     = $connection->getParams();
+        $name       = $params['dbname'];
 
         // Need to get rid of _every_ occurrence of dbname from connection configuration and we have already extracted all relevant info from url
         unset($params['dbname'], $params['path'], $params['url']);
@@ -191,19 +108,35 @@ class DumpCommand extends Command
         $tmpConnection = DriverManager::getConnection($params);
         $tmpConnection->connect();
 
+        if ($connection->getDatabasePlatform() instanceof PostgreSQLPlatform) {
+            $result = $tmpConnection->executeQuery('SELECT rolcreatedb FROM pg_authid WHERE rolname = CURRENT_USER');
+
+            if (!$result->fetchOne()) {
+                $io->error(sprintf('The user %s has not the privilege to create database', $params['user']));
+            }
+
+            $result->free();
+        }
+
+        if ($connection->getDatabasePlatform() instanceof MySQLPlatform) {
+            $result = $tmpConnection->executeQuery('SHOW GRANTS FOR CURRENT_USER');
+
+            // TODO implement database creation voter.
+        }
+
         $exist = in_array($name, $tmpConnection->createSchemaManager()->listDatabases());
 
         $success = true;
         try {
             if ($exist) {
-                $io->info(sprintf('Database "%s" from connection named "%s" already exists. Droping...', $name, $connectionName));
+                $io->info(sprintf('Database "%s" already exists. Droping...', $name));
                 $this->dropAnonymousDatabase($io, $tmpConnection, $name);
             }
 
             $tmpConnection->createSchemaManager()->createDatabase($name);
-            $io->info(sprintf('Created database "%s" from connection named "%s".', $name, $connectionName));
+            $io->info(sprintf('Created database "%s".', $name));
         } catch (Throwable $e) {
-            $io->error(sprintf('Could not create database %s from connection named %s', $name, $connectionName));
+            $io->error(sprintf('Could not create database "%s".', $name));
             $io->error(sprintf('%s', $e->getMessage()));
 
             $success = false;
@@ -212,7 +145,7 @@ class DumpCommand extends Command
         $tmpConnection->close();
 
         if ($success) {
-            $connection = $this->getConnectionToAnonymousDatabase($connectionName);
+            $connection = $this->doctrine->getConnection('anonymous');
 
             $event = new AnonymousDatabaseEvent($connection);
             $this->eventDispatcher->dispatch($event, AnonymousDatabaseEvent::AFTER_CREATED);
@@ -250,100 +183,53 @@ class DumpCommand extends Command
     }
 
     /**
-     * @param string $connectionName
-     *
      * @return void
+     * @throws CannotStartDump
      * @throws Exception
-     * @throws ToolsException
+     * @throws LoadFailed
      */
-    protected function dumpDatabase(string $connectionName): void
+    protected function dumpDatabase(): void
     {
         /** @var Connection $connection */
-        [$connection, $params, $name] = $this->getConnectionInfo($connectionName);
-        $platform = $connection->getDatabasePlatform();
+        $connection           = $this->doctrine->getConnection();
+        $params               = $connection->getParams();
+        $platform             = $connection->getDatabasePlatform();
+        $targetDatabaseParams = $this->doctrine->getConnection('anonymous')->getParams();
 
         if ($platform instanceof PostgreSQLPlatform) {
+            $file = sprintf('%s/%s', sys_get_temp_dir(), 'pgdump.sql');
+
             PostgreSqlDumper::create()
                 ->setDbName($params['dbname'])
                 ->setUserName($params['user'])
                 ->setPassword($params['password'])
-                ->dumpToFile('pgdump.sql')
+                ->dumpToFile($file)
             ;
 
             PostgreSqlLoader::create()
-                ->setDbName($name)
+                ->setDbName($targetDatabaseParams['dbname'])
                 ->setUserName($params['user'])
                 ->setPassword($params['password'])
-                ->loadFromFile('pgdump.sql')
+                ->loadFromFile($file)
             ;
         }
 
         if ($platform instanceof MySQLPlatform) {
+            $file = sprintf('%s/%s', sys_get_temp_dir(), 'msdump.sql');
+
             MySqlDumper::create()
                 ->setDbName($params['dbname'])
                 ->setUserName($params['user'])
                 ->setPassword($params['password'])
-                ->dumpToFile('msdump.sql')
+                ->dumpToFile($file)
             ;
 
             MySqlLoader::create()
-                ->setDbName($name)
+                ->setDbName($targetDatabaseParams['dbname'])
                 ->setUserName($params['user'])
                 ->setPassword($params['password'])
-                ->loadFromFile('msdump.sql')
+                ->loadFromFile($file)
             ;
-        }
-    }
-
-    /**
-     * @param string $connectionName
-     *
-     * @return void
-     */
-    protected function copyDataToAnonymousDatabase(string $connectionName): void
-    {
-        /** @var Connection $from */
-        $from                = $this->doctrine->getConnection($connectionName);
-        $to                  = $this->getConnectionToAnonymousDatabase($connectionName);
-        $platform            = $from->getDatabasePlatform();
-        $schemaManager       = $from->createSchemaManager();
-        $anonymousTablesList = $to->createSchemaManager()->listTableNames();
-
-        $to->connect();
-
-        $platform->supportsForeignKeyConstraints();
-        $to->executeQuery('SET foreign_key_checks = 0');
-
-        /** @var ClassMetadata $class */
-        foreach ($schemaManager->listTableNames() as $tableName) {
-            if (!in_array($tableName, $anonymousTablesList)) {
-                continue;
-            }
-
-            $result  = $from->executeQuery(sprintf('SELECT * FROM %s', $tableName));
-            $table   = $schemaManager->listTableDetails($tableName);
-            $columns = $table->getColumns();
-
-            $types = [];
-            foreach ($columns as $column) {
-                $type = $column->getType()->getBindingType();
-                if (!$column->getNotnull()) {
-                    $type |= ParameterType::NULL;
-                }
-
-                $types[$column->getName()] = $type;
-            }
-
-            if ($result->rowCount() > 0) {
-                foreach ($result->fetchAllAssociative() as $row) {
-                    //                    $to->insert($tableName, $row, $types);
-                    try {
-                        $to->insert($tableName, $row, $types);
-                    } catch (Exception\DriverException $e) {
-                        dd($tableName, $row, $types, $e->getQuery(), $e->getMessage());
-                    }
-                }
-            }
         }
     }
 }

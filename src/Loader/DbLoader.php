@@ -35,6 +35,9 @@ abstract class DbLoader
     /** @var string $loaderBinaryPath */
     protected string $loaderBinaryPath = '';
 
+    /** @var string $dumpBinaryPath */
+    protected string $dumpBinaryPath = '';
+
     protected array $extraOptions = [];
 
     protected array $extraOptionsAfterDbName = [];
