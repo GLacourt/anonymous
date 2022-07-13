@@ -1,6 +1,6 @@
 {
   "name": "glacourt/anonymous",
-  "type": "library",
+  "type": "symfony-bundle",
   "description": "Make database dump anonymous on purpose",
   "license": "proprietary",
   "authors": [
@@ -20,8 +20,9 @@
     "spatie/db-dumper": "^3.2",
     "symfony/process": "^5.4",
     "fzaninotto/faker": "^1.5",
-    "symfony/event-dispatcher": "^6.0",
-    "symfony/property-access": "^6.0"
+    "symfony/event-dispatcher": "^5.4",
+    "symfony/property-access": "^5.4",
+    "symfony/string": "^5.4"
   },
   "autoload": {
     "psr-4": {
