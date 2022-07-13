@@ -27,5 +27,9 @@
             <argument key="$managerRegistry" type="service" id="Doctrine\Persistence\ManagerRegistry" />
             <argument key="$config" type="collection" />
         </service>
+
+        <service id="anonymous.env_var_processor" class="Anonymous\AnonymousEnvVarProcessor">
+            <tag name="container.env_var_processor" />
+        </service>
     </services>
 </container>

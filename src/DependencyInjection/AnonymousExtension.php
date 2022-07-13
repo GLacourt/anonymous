@@ -17,18 +17,13 @@ use Symfony\Component\DependencyInjection\Loader\XmlFileLoader;
  */
 class AnonymousExtension extends Extension implements PrependExtensionInterface
 {
-
-    /**
-     * @param ContainerBuilder $container
-     */
     public function prepend(ContainerBuilder $container)
     {
-        $loader = new XmlFileLoader($container, new FileLocator(
-            __DIR__.'/../../bundles/DoctrineBundle/Resources/config'
-        ));
-
-        $loader->load('dbal.xml');
+        if ($container->hasExtension('doctrine')) {
+            $container->prependExtensionConfig('doctrine', $this->getConfig());
+        }
     }
+
 
     /**
      * @param array            $configs
@@ -41,19 +36,11 @@ class AnonymousExtension extends Extension implements PrependExtensionInterface
         $loader = new XmlFileLoader($container, new FileLocator(__DIR__.'/../../config'));
         $loader->load('services.xml');
 
-        $loader = new XmlFileLoader($container, new FileLocator(
-            __DIR__.'/../../bundles/DoctrineBundle/Resources/config'
-        ));
-        $loader->load('dbal.xml');
-
-        dump('Good loader 2');
-
         $config = $this->processConfiguration(new Configuration(), $configs);
 
         if ($container->hasDefinition('Anonymous\Anonymizer')) {
             $definition = $container->getDefinition('Anonymous\Anonymizer')
                 ->replaceArgument('$config', $config['mapping']);
-            ;
 
             $container->setDefinition('Anonymous\Anonymizer', $definition);
         }
@@ -61,5 +48,37 @@ class AnonymousExtension extends Extension implements PrependExtensionInterface
         $container
             ->registerForAutoconfiguration(AnonymizerInterface::class)
             ->addTag('anonymous.anonymizer');
+    }
+
+    /**
+     * @return array
+     */
+    private function getConfig(): array
+    {
+        return [
+            'dbal' => [
+                'connections' => [
+                    'anonymous' => [
+                        'url' => '%env(anonymous:DATABASE_URL)%',
+                    ],
+                ],
+            ],
+            'orm'  => [
+                'entity_managers' => [
+                    'anonymous' => [
+                        'connection'      => 'anonymous',
+                        'naming_strategy' => 'doctrine.orm.naming_strategy.underscore_number_aware',
+                        'mappings'        => [
+                            'Anonymous' => [
+                                'is_bundle' => false,
+                                'dir'       => '%kernel.project_dir%/src/Entity',
+                                'prefix'    => 'App\Entity',
+                                'alias'     => 'Anonymous',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
     }
 }
