@@ -17,7 +17,12 @@ use Symfony\Component\DependencyInjection\Loader\XmlFileLoader;
  */
 class AnonymousExtension extends Extension implements PrependExtensionInterface
 {
-    public function prepend(ContainerBuilder $container)
+    /**
+     * @param ContainerBuilder $container
+     *
+     * @return void
+     */
+    public function prepend(ContainerBuilder $container): void
     {
         if ($container->hasExtension('doctrine')) {
             $container->prependExtensionConfig('doctrine', $this->getConfig());

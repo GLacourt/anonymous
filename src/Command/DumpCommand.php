@@ -27,6 +27,7 @@ use Spatie\DbDumper\Exceptions\CannotStartDump;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ChoiceQuestion;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -65,6 +66,16 @@ class DumpCommand extends Command
     }
 
     /**
+     * @return void
+     */
+    public function configure(): void
+    {
+        $this
+            ->addOption('dump-file', 'd', InputOption::VALUE_OPTIONAL, 'The name of the dump file', 'dump.sql')
+        ;
+    }
+
+    /**
      * @param InputInterface  $input
      * @param OutputInterface $output
      *
@@ -85,7 +96,31 @@ class DumpCommand extends Command
 
         $io->info('Anonymizing...');
 
-        $this->anonymizer->anonymize();
+        $this->anonymizer->anonymize($io);
+
+        $io->info('Dumping anonymous database...');
+
+        $connection = $this->doctrine->getConnection('anonymous');
+        $params     = $connection->getParams();
+        $platform   = $connection->getDatabasePlatform();
+
+        if ($platform instanceof PostgreSQLPlatform) {
+            PostgreSqlDumper::create()
+                ->setDbName($params['dbname'])
+                ->setUserName($params['user'])
+                ->setPassword($params['password'])
+                ->dumpToFile($input->getOption('dump-file'))
+            ;
+        }
+
+        if ($platform instanceof MySQLPlatform) {
+            MySqlDumper::create()
+                ->setDbName($params['dbname'])
+                ->setUserName($params['user'])
+                ->setPassword($params['password'])
+                ->dumpToFile($input->getOption('dump-file'))
+            ;
+        }
 
         return self::SUCCESS;
     }

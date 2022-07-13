@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Anonymous;
 
-use Doctrine\Bundle\DoctrineBundle\EventSubscriber\EventSubscriberInterface;
+use Doctrine\Common\EventSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Persistence\Mapping\MappingException;
 use ReflectionException;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 /**
@@ -41,11 +42,12 @@ class Anonymizer
     }
 
     /**
+     * @param SymfonyStyle $io
+     *
      * @return void
-     * @throws MappingException
-     * @throws ReflectionException
+     * @throws MappingException|ReflectionException
      */
-    public function anonymize(): void
+    public function anonymize(SymfonyStyle $io): void
     {
         /** @var EntityManagerInterface $entityManager */
         $entityManager    = $this->managerRegistry->getManager('anonymous');
@@ -56,7 +58,7 @@ class Anonymizer
         // Disable listeners handled by the event manager.
         foreach ($entityManager->getEventManager()->getListeners() as $eventName => $listeners) {
             foreach ($listeners as $listener) {
-                if ($listener instanceof EventSubscriberInterface) {
+                if ($listener instanceof EventSubscriber) {
                     $entityManager->getEventManager()->removeEventSubscriber($listener);
 
                     continue;
@@ -75,6 +77,13 @@ class Anonymizer
 
             $entityManager->getMetadataFactory()->setMetadataFor($entity, $metadata);
 
+            $io->info(sprintf('Anonymize "%s" of entity "%s"', implode(', ', array_keys($properties)), $entity));
+
+            $entities    = $entityManager->getRepository($entity)->findAll();
+            $progressBar = $io->createProgressBar(count($entities));
+
+            $progressBar->setFormat('debug');
+
             foreach ($entityManager->getRepository($entity)->findAll() as $object) {
                 foreach ($properties as $property => $anonymizer) {
                     if ($propertyAccessor->isWritable($object, $property) && $this->anonymizerRegistry->has($anonymizer)) {
@@ -84,7 +93,11 @@ class Anonymizer
                         $propertyAccessor->setValue($object, $property, $anonymizedValue);
                     }
                 }
+
+                $progressBar->advance();
             }
+
+            $progressBar->finish();
 
             $entityManager->flush();
             $entityManager->clear();
