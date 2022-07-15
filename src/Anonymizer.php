@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Anonymous;
 
+use Anonymous\Attribute\Anonymize;
 use Doctrine\Common\EventSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Persistence\Mapping\MappingException;
+use ReflectionAttribute;
+use ReflectionClass;
 use ReflectionException;
+use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
@@ -22,6 +27,9 @@ class Anonymizer
 
     /** @var ManagerRegistry $managerRegistry */
     protected ManagerRegistry $managerRegistry;
+
+    /** @var EntityManagerInterface $entityManager */
+    protected EntityManagerInterface $entityManager;
 
     /** @var array $config */
     protected array $config = [];
@@ -38,7 +46,9 @@ class Anonymizer
         $this->anonymizerRegistry = $anonymizerRegistry;
         $this->managerRegistry    = $managerRegistry;
         $this->config             = $config;
+        $this->entityManager      = $managerRegistry->getManager('anonymous');
 
+        $this->initialize();
     }
 
     /**
@@ -49,58 +59,164 @@ class Anonymizer
      */
     public function anonymize(SymfonyStyle $io): void
     {
-        /** @var EntityManagerInterface $entityManager */
-        $entityManager    = $this->managerRegistry->getManager('anonymous');
-        $propertyAccessor = PropertyAccess::createPropertyAccessor();
+        $this->disableEntityListeners();
 
-        $entityManager->getConfiguration()->getEntityListenerResolver()->clear();
-
-        // Disable listeners handled by the event manager.
-        foreach ($entityManager->getEventManager()->getListeners() as $eventName => $listeners) {
-            foreach ($listeners as $listener) {
-                if ($listener instanceof EventSubscriber) {
-                    $entityManager->getEventManager()->removeEventSubscriber($listener);
-
-                    continue;
-                }
-
-                $entityManager->getEventManager()->removeEventListener([$eventName], $listener);
-            }
-        }
-
-        foreach ($this->config as $entity => $properties) {
-            // Disable listeners handled by the metadata.
-            $metadata = $entityManager->getMetadataFactory()->getMetadataFor($entity);
-            foreach ($metadata->entityListeners as $event => $listeners) {
-                $metadata->entityListeners[$event] = [];
+        foreach ($this->config['mapping'] as $entity => $properties) {
+            if ($this->entityManager->getMetadataFactory()->isTransient($entity)) {
+                continue;
             }
 
-            $entityManager->getMetadataFactory()->setMetadataFor($entity, $metadata);
+            $this->disableMetadataEntityListeners($entity);
 
             $io->info(sprintf('Anonymize "%s" of entity "%s"', implode(', ', array_keys($properties)), $entity));
 
-            $entities    = $entityManager->getRepository($entity)->findAll();
+            if ($this->config['pagination']) {
+                $this->paginate($io, $entity, $properties);
+
+                return ;
+            }
+
+            $entities    = $this->entityManager->getRepository($entity)->findAll();
             $progressBar = $io->createProgressBar(count($entities));
 
             $progressBar->setFormat('debug');
 
-            foreach ($entityManager->getRepository($entity)->findAll() as $object) {
-                foreach ($properties as $property => $anonymizer) {
-                    if ($propertyAccessor->isWritable($object, $property) && $this->anonymizerRegistry->has($anonymizer)) {
-                        $anonymizedValue = $this->anonymizerRegistry->get($anonymizer)
-                            ->anonymize($propertyAccessor->getValue($object, $property));
-
-                        $propertyAccessor->setValue($object, $property, $anonymizedValue);
-                    }
-                }
-
-                $progressBar->advance();
-            }
+            $this->processAnonymize($entities, $properties, $progressBar);
 
             $progressBar->finish();
+        }
+    }
 
-            $entityManager->flush();
-            $entityManager->clear();
+    /**
+     * @return void
+     */
+    private function initialize(): void
+    {
+        $mapping  = $this->config['mapping'];
+        $entities = $this->entityManager->getConfiguration()->getMetadataDriverImpl()->getAllClassNames();
+
+        foreach ($entities as $entity) {
+            if (!class_exists($entity)) {
+                continue;
+            }
+
+            $reflector = new ReflectionClass($entity);
+
+            foreach ($reflector->getProperties() as $property) {
+                $attributes = $property->getAttributes(Anonymize::class, ReflectionAttribute::IS_INSTANCEOF);
+
+                if (!empty($attributes)) {
+                    $attribute = array_shift($attributes);
+                    $instance  = $attribute->newInstance();
+
+                    if (!isset($mapping[$entity])) {
+                        $mapping[$entity] = [];
+                    }
+
+                    $mapping[$entity][$property->getName()] = $instance->getAnonymizer();
+                }
+            }
+        }
+
+        $this->config['mapping'] = $mapping;
+    }
+
+    /**
+     * @return void
+     */
+    private function disableEntityListeners(): void
+    {
+        $this->entityManager->getConfiguration()->getEntityListenerResolver()->clear();
+
+        // Disable listeners handled by the event manager.
+        foreach ($this->entityManager->getEventManager()->getListeners() as $eventName => $listeners) {
+            foreach ($listeners as $listener) {
+                if ($listener instanceof EventSubscriber) {
+                    $this->entityManager->getEventManager()->removeEventSubscriber($listener);
+
+                    continue;
+                }
+
+                $this->entityManager->getEventManager()->removeEventListener([$eventName], $listener);
+            }
+        }
+    }
+
+    /**
+     * @param string $class
+     *
+     * @return void
+     *
+     * @throws MappingException
+     * @throws ReflectionException
+     */
+    private function disableMetadataEntityListeners(string $class): void
+    {
+        // Disable listeners handled by the metadata.
+        $metadata = $this->entityManager->getMetadataFactory()->getMetadataFor($class);
+        foreach ($metadata->entityListeners as $event => $listeners) {
+            $metadata->entityListeners[$event] = [];
+        }
+
+        $this->entityManager->getMetadataFactory()->setMetadataFor($class, $metadata);
+    }
+
+    /**
+     * @param iterable    $entities
+     * @param array       $properties
+     * @param ProgressBar $progressBar
+     *
+     * @return void
+     */
+    private function processAnonymize(iterable $entities, array $properties, ProgressBar $progressBar): void
+    {
+        $accessor = PropertyAccess::createPropertyAccessor();
+
+        foreach ($entities as $object) {
+            foreach ($properties as $property => $anonymizer) {
+                if ($accessor->isWritable($object, $property) && $this->anonymizerRegistry->has($anonymizer)) {
+                    $anonymizedValue = $this->anonymizerRegistry->get($anonymizer)
+                        ->anonymize($accessor->getValue($object, $property));
+
+                    $accessor->setValue($object, $property, $anonymizedValue);
+                }
+            }
+
+            $progressBar->advance();
+        }
+
+        $this->entityManager->flush();
+        $this->entityManager->clear();
+    }
+
+    /**
+     * @param SymfonyStyle $io
+     * @param string       $entity
+     * @param array        $properties
+     *
+     * @return void
+     */
+    private function paginate(SymfonyStyle $io, string $entity, array $properties = []): void
+    {
+        $pageSize = $this->config['page_size'];
+        $dql      = sprintf('SELECT o FROM %s o', $this->entityManager->getClassMetadata($entity)->getName());
+        $query    = $this->entityManager->createQuery($dql);
+
+        $paginator  = new Paginator($query, false);
+        $totalItems = count($paginator);
+        $pagesCount = ceil($totalItems / $pageSize);
+
+        $progressBar = $io->createProgressBar($totalItems);
+
+        $progressBar->setFormat('debug');
+
+        for ($i = 0; $i < $pagesCount; $i++) {
+            $paginator
+                ->getQuery()
+                ->setFirstResult($pageSize * $i)
+                ->setMaxResults($pageSize);
+
+            $this->processAnonymize($paginator, $properties, $progressBar);
         }
     }
 }

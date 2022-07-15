@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Anonymous\Anonymizer;
 
+use Anonymous\Anonymizer;
+use Doctrine\ORM\EntityManager;
 use Faker\Factory;
 
 use function Symfony\Component\String\u;

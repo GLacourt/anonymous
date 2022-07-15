@@ -45,7 +45,7 @@ class AnonymousExtension extends Extension implements PrependExtensionInterface
 
         if ($container->hasDefinition('Anonymous\Anonymizer')) {
             $definition = $container->getDefinition('Anonymous\Anonymizer')
-                ->replaceArgument('$config', $config['mapping']);
+                ->replaceArgument('$config', $config);
 
             $container->setDefinition('Anonymous\Anonymizer', $definition);
         }
