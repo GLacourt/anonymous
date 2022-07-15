@@ -19,8 +19,6 @@ use Symfony\Component\PropertyAccess\PropertyAccess;
  */
 class Anonymizer
 {
-    private const PAGE_SIZE = 100;
-
     /** @var AnonymizerRegistryInterface $anonymizerRegistry */
     protected AnonymizerRegistryInterface $anonymizerRegistry;
 
