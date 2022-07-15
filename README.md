@@ -1,11 +1,5 @@
 # Anonymous
-> This project purpose's is to allow production database dump with anonymous data.
-
-## Table of contents
-* [Technologies](#requirements)
-* [Setup](#setup)
-* [Configs](#configs)
-
+> The purpose of this bundle is to generate a dump of the database with anonymous data.
 
 ## Requirements
 * PHP 8.0
@@ -14,11 +8,51 @@
 
 ## Setup
 
-```bash
+```shell
 php composer require glacourt/anonymous
 ```
 
+## Usage
+
+```shell
+php bin/console anonymous:dump
+```
+
+## Register an anomymizer
+
+1. Using the configuration in anonymous.yaml (see [configs](#configs))
+2. Using the attribute `Anonymize`
+
+```php
+#[Entity]
+class User
+{
+    #[Anonymize(anonymizer: EmailAnonymizer::class)]
+    protected string $email;
+}
+```
+
 ## Configs
+
+If you want to use the config reference follow the next example:
+```shell
+php bin/console config:dump-reference anonymous
+# Default configuration for extension with alias: "anonymous"
+anonymous:
+
+    # Enable or disable the pagination
+    pagination:           false
+
+    # Set the size of the pagination
+    page_size:            100
+
+    # Set the mapping with entities, properties and anonymizer to be used.
+    mapping:
+
+        # Prototype
+        entity:               ~
+```
+
 ```yaml
 #config/packages/anonymous.yaml
 anonymous:
@@ -27,9 +61,9 @@ anonymous:
       email: Anonymous\Anonymizer\EmailAnonymizer
 ```
 
-## Annexes
+## Anonymizer
 
-List of Anonymizer available :
+List of the available anonymizers:
 
 - Anonymous\Anonymizer\EmailAnonymizer
 
@@ -59,5 +93,4 @@ class DummyAnonymizer implements AnonymizerInterface
         return str_shuffle($value);
     }
 }
-
 ```

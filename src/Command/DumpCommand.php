@@ -6,6 +6,7 @@ namespace Anonymous\Command;
 
 use Anonymous\Anonymizer;
 use Anonymous\Event\AnonymousDatabaseEvent;
+use Anonymous\Loader\Exception\CannotStartLoad;
 use Anonymous\Loader\Exception\LoadFailed;
 use Anonymous\Loader\Platform\MySql as MySqlLoader;
 use Anonymous\Loader\Platform\PostgreSql as PostgreSqlLoader;
@@ -75,7 +76,7 @@ class DumpCommand extends Command
      * @param OutputInterface $output
      *
      * @return int
-     * @throws CannotStartDump|Exception|LoadFailed|MappingException|ReflectionException
+     * @throws CannotStartDump|Exception|LoadFailed|MappingException|ReflectionException|CannotStartLoad
      */
     public function execute(InputInterface $input, OutputInterface $output): int
     {
@@ -138,22 +139,6 @@ class DumpCommand extends Command
         $tmpConnection = DriverManager::getConnection($params);
         $tmpConnection->connect();
 
-        if ($connection->getDatabasePlatform() instanceof PostgreSQLPlatform) {
-            $result = $tmpConnection->executeQuery('SELECT rolcreatedb FROM pg_authid WHERE rolname = CURRENT_USER');
-
-            if (!$result->fetchOne()) {
-                $io->error(sprintf('The user %s has not the privilege to create database', $params['user']));
-            }
-
-            $result->free();
-        }
-
-        if ($connection->getDatabasePlatform() instanceof MySQLPlatform) {
-            $result = $tmpConnection->executeQuery('SHOW GRANTS FOR CURRENT_USER');
-
-            // TODO implement database creation voter.
-        }
-
         $exist = in_array($name, $tmpConnection->createSchemaManager()->listDatabases());
 
         $success = true;
@@ -177,8 +162,10 @@ class DumpCommand extends Command
         if ($success) {
             $connection = $this->doctrine->getConnection('anonymous');
 
-            $event = new AnonymousDatabaseEvent($connection);
-            $this->eventDispatcher->dispatch($event, AnonymousDatabaseEvent::AFTER_CREATED);
+            if ($connection instanceof Connection) {
+                $event = new AnonymousDatabaseEvent($connection);
+                $this->eventDispatcher->dispatch($event, AnonymousDatabaseEvent::AFTER_CREATED);
+            }
         }
 
         return $success;
@@ -195,7 +182,7 @@ class DumpCommand extends Command
     {
         $success = true;
         try {
-            $connection->getSchemaManager()->dropDatabase($name);
+            $connection->createSchemaManager()->dropDatabase($name);
             $io->info(sprintf('Dropped database %s.', $name));
         } catch (Throwable $e) {
             $io->error(sprintf('Could not drop database %s.', $name));
@@ -214,9 +201,8 @@ class DumpCommand extends Command
 
     /**
      * @return void
-     * @throws CannotStartDump
-     * @throws Exception
-     * @throws LoadFailed
+     *
+     * @throws CannotStartDump|Exception|LoadFailed|CannotStartLoad
      */
     protected function dumpDatabase(): void
     {
