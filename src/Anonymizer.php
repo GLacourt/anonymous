@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Anonymous;
 
+use Anonymous\Attribute\Anonymize;
 use Doctrine\Common\EventSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Persistence\Mapping\MappingException;
+use ReflectionAttribute;
+use ReflectionClass;
 use ReflectionException;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Style\SymfonyStyle;
@@ -44,6 +47,8 @@ class Anonymizer
         $this->managerRegistry    = $managerRegistry;
         $this->config             = $config;
         $this->entityManager      = $managerRegistry->getManager('anonymous');
+
+        $this->initialize();
     }
 
     /**
@@ -80,6 +85,40 @@ class Anonymizer
 
             $progressBar->finish();
         }
+    }
+
+    /**
+     * @return void
+     */
+    private function initialize(): void
+    {
+        $mapping  = $this->config['mapping'];
+        $entities = $this->entityManager->getConfiguration()->getMetadataDriverImpl()->getAllClassNames();
+
+        foreach ($entities as $entity) {
+            if (!class_exists($entity)) {
+                continue;
+            }
+
+            $reflector = new ReflectionClass($entity);
+
+            foreach ($reflector->getProperties() as $property) {
+                $attributes = $property->getAttributes(Anonymize::class, ReflectionAttribute::IS_INSTANCEOF);
+
+                if (!empty($attributes)) {
+                    $attribute = array_shift($attributes);
+                    $instance  = $attribute->newInstance();
+
+                    if (!isset($mapping[$entity])) {
+                        $mapping[$entity] = [];
+                    }
+
+                    $mapping[$entity][$property->getName()] = $instance->getAnonymizer();
+                }
+            }
+        }
+
+        $this->config['mapping'] = $mapping;
     }
 
     /**
